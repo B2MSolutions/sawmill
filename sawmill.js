@@ -1,11 +1,10 @@
 #!/usr/local/bin/node
 
 var _ = require('lodash'),
-  AWS = require('aws-sdk'),
-  cloudwatchlogs = new AWS.CloudWatchLogs(),
-  lynx = require('lynx'),
-  lynxInstance = undefined,
-  parser = require('./parser');
+    lynx = require('lynx'),
+    lynxInstance = undefined,
+    parser = require('./parser'),
+    egon = require('egon');
 
 function metrics() {
   if (!lynxInstance) {
@@ -29,20 +28,13 @@ function isNumber(n) {
 
 var statusCounts = {};
 
-function run(nextToken) {
-  var params = {
-    logGroupName: '/var/log/haproxy.log',
-    logStreamName: 'loadbalancers',
-    nextToken: nextToken
-  };
-
-  cloudwatchlogs.getLogEvents(params, function(err, log) {
+function run() {
+  egon.crossStreams('/var/log/haproxy.log', function(err, events) {
     if (err) {
       console.error('saw failure!', err);
     }
 
-    if (!log) return wait(nextToken, run);
-    if (!nextToken) return wait(log.nextForwardToken, run);
+    if (!events) return wait(run);
 
     console.log('processing...', new Date());
 
@@ -64,7 +56,7 @@ function run(nextToken) {
     var maxTime = 0;
     var lastmessage = '';
 
-    log.events.forEach(function(event) {
+    events.forEach(function(event) {
       if(!event.message) {
         console.error('no message on event', event);
         return;
@@ -86,7 +78,7 @@ function run(nextToken) {
       requestCount++;
       minTime = Math.min(minTime, parsed.date);
       maxTime = Math.max(maxTime, parsed.date);
-      
+
       var statuscode = parsed.statusCode;
       var haproxy = parsed.haproxy;
       var nodeserver = parsed.nodeserver;
@@ -134,7 +126,7 @@ function run(nextToken) {
     metrics().gauge(bucket('request.all'), requestsPerSecond);
 
     _.keys(statusCounts).forEach(function(k) {
-      if (statusCounts[k] > 0) {        
+      if (statusCounts[k] > 0) {
         console.log(bucket(k), statusCounts[k]);
       }
 
@@ -142,14 +134,12 @@ function run(nextToken) {
     });
 
     console.log('.');
-    wait(log.nextForwardToken, run);
+    wait(run);
   });
 }
 
-function wait(token, cb) {
-  setTimeout(function() {
-    cb(token);
-  }, 10000);
+function wait(cb) {
+  setTimeout(cb, 10000);
 }
 
 console.log('starting the saws...');
