@@ -27,9 +27,12 @@ function isNumber(n) {
 }
 
 var statusCounts = {};
+var params = {
+  logGroupName: '/var/log/haproxy.log'
+}
 
 function run() {
-  egon.crossStreams('/var/log/haproxy.log', function(err, events) {
+  egon.crossStreams(params, function(err, events) {
     if (err) {
       console.error('saw failure!', err);
     }
